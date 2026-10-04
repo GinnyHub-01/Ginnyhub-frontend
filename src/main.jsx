@@ -102,6 +102,18 @@ function useHomeBanners() {
   return banners;
 }
 
+// Catches render errors so one bad page can never blank the whole shop. It is keyed by route,
+// so navigating to another page resets it automatically.
+class PageBoundary extends React.Component {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(err) { console.error('Page crashed:', err); }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return <main className="pd page-width"><div className="load-error" role="alert"><RefreshCw size={30} /><h3>Something went wrong on this page</h3><p>Please try again.</p><button className="primary" onClick={() => this.setState({ failed: false })}>Try again <RefreshCw size={15} /></button></div></main>;
+  }
+}
+
 function App() {
   const [cart, setCart] = useState(() => readJSON('gh-cart', []));
   const [loc, setLoc] = useState(parsePath);
@@ -164,7 +176,10 @@ function App() {
   const delivery = subtotal >= shipping.freeOver || subtotal === 0 ? 0 : shipping.fee;
   const total = subtotal + delivery;
 
-  const go = (path, param) => {
+  const go = (rawPath, param) => {
+    let path = rawPath;
+    if (typeof path === 'string' && path.startsWith('/')) path = ROUTES[path.replace(/\/$/, '') || '/'] || 'notfound'; // "/shop" -> "shop"
+    if (path !== 'product' && !Object.values(ROUTES).includes(path) && path !== 'notfound') path = 'notfound';
     const next = routePath(path, param);
     if (window.location.pathname !== next) window.history.pushState({ route: path, param }, '', next);
     setLoc({ route: path, param: param ?? null });
@@ -200,6 +215,7 @@ function App() {
     <Announcement />
     <Header items={items} query={query} setQuery={setQuery} mobileNav={mobileNav} setMobileNav={setMobileNav} go={go} user={user} signOut={signOut} />
 
+    <PageBoundary key={`${loc.route}:${loc.param ?? ''}`}>
     {route === 'home' && <Home featured={featured} catalog={catalog} add={add} go={go} favorites={favorites} toggleFavorite={toggleFavorite} banners={homeBanners} />}
     {route === 'shop' && <Shop products={filtered} catalog={catalog} query={query} setQuery={setQuery} cat={cat} setCat={setCat} add={add} go={go} favorites={favorites} toggleFavorite={toggleFavorite} />}
     {route === 'product' && <ProductPage slug={loc.param} catalog={catalog} add={add} go={go} freeOver={shipping.freeOver} favorites={favorites} toggleFavorite={toggleFavorite} />}
@@ -210,6 +226,7 @@ function App() {
     {route === 'account' && <Account go={go} user={user} setUser={setUser} notify={flash} initialTab={loc.param} /> }
     {route === 'checkout' && <Checkout cart={cart} subtotal={subtotal} delivery={delivery} freeOver={shipping.freeOver} shippingFee={shipping.fee} total={total} setCart={setCart} go={go} notify={flash} reload={catalog.reload} />}
     {route === 'track' && <TrackOrder go={go} />}
+    </PageBoundary>
 
     <Footer go={go} />
     {notice && <div className="toast"><Check size={17} />{notice}</div>}
