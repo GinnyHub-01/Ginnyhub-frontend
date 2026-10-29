@@ -134,7 +134,9 @@ function App() {
       if (Number.isFinite(c.deliveryFee) && Number.isFinite(c.freeDeliveryThreshold)) setShipping({ fee: c.deliveryFee, freeOver: c.freeDeliveryThreshold });
     }).catch(() => {});
   }, []);
-  useEffect(() => localStorage.setItem('gh-cart', JSON.stringify(cart)), [cart]);
+  // These effects perform work only. Keep their callbacks block-bodied so they
+  // never accidentally return a browser API value for React to treat as cleanup.
+  useEffect(() => { localStorage.setItem('gh-cart', JSON.stringify(cart)); }, [cart]);
   // Wishlist: guests keep it in localStorage; signed-in customers get it synced to their account,
   // merging in anything they favourited before signing in.
   useEffect(() => {
@@ -162,7 +164,7 @@ function App() {
     window.addEventListener('popstate', sync);
     return () => window.removeEventListener('popstate', sync);
   }, []);
-  useEffect(() => window.scrollTo({ top: 0, behavior: 'instant' }), [loc.route, loc.param]);
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [loc.route, loc.param]);
 
   const filtered = useMemo(() => products.filter(p =>
     (cat === 'All' || p.category === cat) && p.name.toLowerCase().includes(query.toLowerCase())
@@ -690,7 +692,7 @@ function Auth({ mode, go, setUser, notify }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => setIsSignup(mode === 'signup'), [mode]);
+  useEffect(() => { setIsSignup(mode === 'signup'); }, [mode]);
 
   async function submit(e) {
     e.preventDefault();
