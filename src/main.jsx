@@ -26,7 +26,7 @@ const fallback = [
 const money = n => `GH₵ ${Number(n || 0).toFixed(2)}`;
 const round2 = n => Math.round(n * 100) / 100;
 const authToken = () => localStorage.getItem('gh-token') || '';
-const ROUTES = { '/': 'home', '/shop': 'shop', '/cart': 'cart', '/checkout': 'checkout', '/signin': 'signin', '/signup': 'signup', '/account': 'account', '/track': 'track' };
+const ROUTES = { '/': 'home', '/shop': 'shop', '/cart': 'cart', '/checkout': 'checkout', '/signin': 'signin', '/signup': 'signup', '/account': 'account', '/track': 'track', '/payment/callback': 'paymentCallback' };
 const parsePath = () => {
   const p = window.location.pathname.replace(/\/$/, '') || '/';
   const m = p.match(/^\/product\/([^/]+)$/);
@@ -231,6 +231,7 @@ function App() {
     {route === 'account' && <Account go={go} user={user} setUser={setUser} notify={flash} initialTab={loc.param} /> }
     {route === 'checkout' && <Checkout cart={cart} subtotal={subtotal} delivery={delivery} freeOver={shipping.freeOver} shippingFee={shipping.fee} total={total} setCart={setCart} go={go} notify={flash} reload={catalog.reload} />}
     {route === 'track' && <TrackOrder go={go} />}
+    {route === 'paymentCallback' && <PaymentCallback setCart={setCart} go={go} reload={catalog.reload} notify={flash} />}
     </PageBoundary>
 
     <Footer go={go} />
@@ -644,6 +645,8 @@ function BellIcon(){return <span className="bell-icon"><span>•</span></span>}
 
 function Checkout({ cart, subtotal, delivery, freeOver, shippingFee, total, setCart, go, notify, reload }) {
   const [placing, setPlacing] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('Paystack');
+  const [deliveryCity, setDeliveryCity] = useState('');
   const [couponCode, setCouponCode] = useState('');
   const [coupon, setCoupon] = useState(null); // { code, discount }
   const [couponBusy, setCouponBusy] = useState(false);
@@ -673,20 +676,62 @@ function Checkout({ cart, subtotal, delivery, freeOver, shippingFee, total, setC
     const f = new FormData(e.currentTarget);
     const body = {
       customer: { name: f.get('name'), email: f.get('email'), phone: f.get('phone') },
-      deliveryAddress: f.get('address'), paymentMethod: f.get('payment'), notes: f.get('notes'),
+      deliveryAddress: f.get('address'), deliveryCity: f.get('city'), paymentMethod: f.get('payment'), notes: f.get('notes'),
       items: cart.map(({ productId, quantity }) => ({ productId, quantity })),
       ...(coupon ? { couponCode: coupon.code } : {}),
     };
     try {
       const r = await fetch(`${API}/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(authToken() ? { Authorization: `Bearer ${authToken()}` } : {}) }, body: JSON.stringify(body) });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || 'We could not place your order. Please try again.');
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.message || 'We could not place your order. Please try again.');
+      if (data.payment?.authorizationUrl) {
+        window.location.assign(data.payment.authorizationUrl);
+        return;
+      }
       setCart([]); reload(); notify('Order received. We will contact you shortly.', 4500); go('home');
     } catch (err) {
       notify(err instanceof TypeError ? 'Could not reach the shop. Check your connection and try again.' : err.message, 4500);
     } finally { setPlacing(false); }
   }
   if (!cart.length) return <main className="checkout-page page-width"><div className="empty-state"><div className="empty-icon"><Check /></div><h2>No items to check out</h2><button className="primary" onClick={() => go('shop')}>Browse products <ArrowRight size={17} /></button></div></main>;
-  return <main className="checkout-page page-width"><div className="checkout-head"><div><p className="eyebrow">SECURE CHECKOUT</p><h1>Complete your order</h1><p>One simple step and we will confirm delivery with you.</p></div><div className="checkout-steps"><span className="done">1 <Check size={12} /></span><i /><span className="active">2</span><i /><span>3</span></div></div><div className="checkout-layout"><form className="checkout-form" onSubmit={placeOrder}><div className="form-card"><div className="form-title"><span>01</span><div><h2>Your details</h2><p>Where should we contact you?</p></div></div><div className="field-grid"><label>Full name<input name="name" placeholder="Your full name" required /></label><label>Phone / WhatsApp<input name="phone" placeholder="0550 000 000" required /></label></div><label>Email address<input name="email" type="email" placeholder="you@example.com" required /></label><label>Delivery address<textarea name="address" placeholder="House number, street, area, city" required /></label></div><div className="form-card"><div className="form-title"><span>02</span><div><h2>Payment</h2><p>Choose how you would like to pay.</p></div></div><div className="payment-options"><label><input type="radio" name="payment" value="Cash on Delivery" defaultChecked /><span><b>Cash on Delivery</b><small>Pay when your order arrives</small></span></label><label><input type="radio" name="payment" value="Mobile Money" /><span><b>Mobile Money</b><small>We will confirm payment details</small></span></label></div><label>Order note <textarea name="notes" placeholder="Optional note for your order" /></label></div><button className="primary wide place-order" disabled={placing}>{placing ? 'Placing order…' : <>Place order <ArrowRight size={17} /></>}</button></form><Summary subtotal={subtotal} delivery={adjustedDelivery} freeOver={freeOver} total={adjustedTotal} showCta={false} coupon={coupon} couponCode={couponCode} setCouponCode={setCouponCode} applyCoupon={applyCoupon} removeCoupon={removeCoupon} couponBusy={couponBusy} couponError={couponError} /></div></main>;
+  return <main className="checkout-page page-width"><div className="checkout-head"><div><p className="eyebrow">SECURE CHECKOUT</p><h1>Complete your order</h1><p>One simple step and we will confirm delivery with you.</p></div><div className="checkout-steps"><span className="done">1 <Check size={12} /></span><i /><span className="active">2</span><i /><span>3</span></div></div><div className="checkout-layout"><form className="checkout-form" onSubmit={placeOrder}><div className="form-card"><div className="form-title"><span>01</span><div><h2>Your details</h2><p>Where should we contact you?</p></div></div><div className="field-grid"><label>Full name<input name="name" placeholder="Your full name" required /></label><label>Phone / WhatsApp<input name="phone" placeholder="0550 000 000" required /></label></div><label>Email address<input name="email" type="email" placeholder="you@example.com" required /></label><label>Delivery address<textarea name="address" placeholder="House number, street, area" required /></label><label>City / town<input name="city" value={deliveryCity} onChange={e => { const city = e.target.value; setDeliveryCity(city); if (city.trim().toLowerCase() !== 'takoradi') setPaymentMethod('Paystack'); }} placeholder="e.g. Takoradi, Accra, Kumasi" required /></label></div><div className="form-card"><div className="form-title"><span>02</span><div><h2>Payment</h2><p>Choose how you would like to pay.</p></div></div><div className="payment-options">
+        <label><input type="radio" name="payment" value="Paystack" checked={paymentMethod === 'Paystack'} onChange={() => setPaymentMethod('Paystack')} /><span><b>Paystack</b><small>Pay securely online with Mobile Money or card</small></span></label>
+        {deliveryCity.trim().toLowerCase() === 'takoradi' && <label><input type="radio" name="payment" value="Cash on Delivery" checked={paymentMethod === 'Cash on Delivery'} onChange={() => setPaymentMethod('Cash on Delivery')} /><span><b>Cash on Delivery</b><small>Available for delivery within Takoradi only</small></span></label>}
+      </div>
+      {deliveryCity.trim().toLowerCase() !== 'takoradi' && <p className="form-note">Cash on Delivery is available only within Takoradi. Choose Paystack for other locations.</p>}<label>Order note <textarea name="notes" placeholder="Optional note for your order" /></label></div><button className="primary wide place-order" disabled={placing}>{placing ? 'Placing order…' : <>Place order <ArrowRight size={17} /></>}</button></form><Summary subtotal={subtotal} delivery={adjustedDelivery} freeOver={freeOver} total={adjustedTotal} showCta={false} coupon={coupon} couponCode={couponCode} setCouponCode={setCouponCode} applyCoupon={applyCoupon} removeCoupon={removeCoupon} couponBusy={couponBusy} couponError={couponError} /></div></main>;
+}
+
+function PaymentCallback({ setCart, go, reload }) {
+  const [state, setState] = useState({ status: 'verifying', message: 'Confirming your payment with Paystack…', order: null });
+  useEffect(() => {
+    let alive = true;
+    const params = new URLSearchParams(window.location.search);
+    const reference = params.get('reference') || params.get('trxref');
+    if (!reference) {
+      setState({ status: 'error', message: 'We could not find a Paystack payment reference.', order: null });
+      return () => { alive = false; };
+    }
+    fetch(`${API}/orders/paystack/verify/${encodeURIComponent(reference)}`)
+      .then(async r => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.message || 'We could not verify your payment.');
+        if (!data.verified) throw new Error('Your payment has not been confirmed. If you were charged, please contact us with your payment reference.');
+        if (alive) {
+          setCart([]);
+          reload();
+          setState({ status: 'success', message: 'Your payment was successful and your order is confirmed.', order: data.order });
+        }
+      })
+      .catch(err => { if (alive) setState({ status: 'error', message: err.message || 'Payment verification failed.', order: null }); });
+    return () => { alive = false; };
+  }, [setCart, reload]);
+  return <main className="checkout-page page-width"><div className="empty-state">
+    {state.status === 'verifying' ? <RefreshCw size={34} /> : state.status === 'success' ? <Check size={34} /> : <LockKeyhole size={34} />}
+    <h2>{state.status === 'verifying' ? 'Verifying payment' : state.status === 'success' ? 'Payment successful' : 'Payment not confirmed'}</h2>
+    <p>{state.message}</p>
+    {state.order && <p><b>Order #{String(state.order._id).slice(-6).toUpperCase()}</b></p>}
+    {state.status !== 'verifying' && <button className="primary" onClick={() => go('home')}>Continue shopping <ArrowRight size={17} /></button>}
+  </div></main>;
 }
 
 function Auth({ mode, go, setUser, notify }) {
