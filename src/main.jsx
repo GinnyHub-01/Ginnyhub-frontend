@@ -164,7 +164,10 @@ function App() {
     window.addEventListener('popstate', sync);
     return () => window.removeEventListener('popstate', sync);
   }, []);
-  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [loc.route, loc.param]);
+  useEffect(() => {
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    window.scrollTo({ top: 0, behavior });
+  }, [loc.route, loc.param]);
 
   const filtered = useMemo(() => products.filter(p =>
     (cat === 'All' || p.category === cat) && p.name.toLowerCase().includes(query.toLowerCase())
@@ -267,9 +270,9 @@ function AccountMenu({ go, user, signOut }) {
 function Header({ items, query, setQuery, mobileNav, setMobileNav, go, user, signOut }) {
   return <header className="header">
     <div className="header-inner">
-      <button className="mobile-menu" onClick={() => setMobileNav(!mobileNav)} aria-label="Menu">{mobileNav ? <X /> : <Menu />}</button>
+      <button className="mobile-menu" onClick={() => setMobileNav(!mobileNav)} aria-label="Menu" aria-expanded={mobileNav} aria-controls="primary-navigation">{mobileNav ? <X /> : <Menu />}</button>
       <Link to="home" go={go} className="logo" aria-label="Ginnys Hub home"><img src="/ginnys-logo.webp" alt="Ginnys Hub" width="170" height="86" /></Link>
-      <nav className={mobileNav ? 'nav open' : 'nav'}>
+      <nav id="primary-navigation" className={mobileNav ? 'nav open' : 'nav'}>
         <Link to="home" go={go}>Home</Link>
         <Link to="shop" go={go}>Shop</Link>
         <Link to="shop" go={go}>Mesh Hair</Link>
