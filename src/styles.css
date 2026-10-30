@@ -399,3 +399,8 @@ button,a{-webkit-tap-highlight-color:transparent}
   .site-shell>main{animation:none}
   .product-card,.product-media,.primary,.secondary,.outline,.back-shop,.account-button,.category-row button,.qty button,.fav,.mobile-menu{transition:none}
 }
+
+/* Prevent iOS Safari from zooming the page when a small-text field receives focus. */
+@media(max-width:760px){
+  :is(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),textarea,select){font-size:16px}
+}
